@@ -6,6 +6,7 @@ build
 .coverage
 .tox
 cover
+.idea
 .testrepository
 subunit.log
 AUTHORS

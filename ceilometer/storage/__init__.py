@@ -129,6 +129,17 @@ class EventFilter(object):
         self.traits = traits
 
 
+class EventBodyFilter(object):
+    """
+
+    :param event_id: Id of the event for which a body belongs
+    :param values
+    """
+    def __init__(self, event_id=None, keys={}):
+        self.event_id = event_id
+        self.keys = keys
+
+
 def dbsync():
     service.prepare_service()
     get_connection(cfg.CONF).upgrade()

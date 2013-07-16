@@ -16,6 +16,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import json
 import msgpack
 from oslo.config import cfg
 import socket
@@ -226,6 +227,16 @@ class CollectorService(rpc_service.Service):
             LOG.exception(_("Unable to store events: %s"), err)
             # By re-raising we avoid ack()'ing the message.
             raise
+        event_body = models.EventBody(event, body)
+        try:
+            self.storage_conn.record_event_bodies([event_body, ])
+        except Exception as err:
+            LOG.exception(_("Unable to store event body: %s"), err)
+            # At this point we've stored data for this event,
+            # re-raising would cause the message to go un-ack()'d.
+            # When we reprocess this message, it'll store another
+            # event, then fail again. Thus, flooding the database
+            # with duplicate events.
 
     def _process_notification_for_ext(self, ext, notification):
         handler = ext.obj

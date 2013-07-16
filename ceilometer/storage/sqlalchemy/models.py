@@ -208,6 +208,30 @@ class UniqueName(Base):
         return "<UniqueName: %s>" % self.key
 
 
+class EventBodyEntry(Base):
+    __tablename__ = 'event_body_entry'
+    __table_args__ = (
+        Index('key_id', 'key_id'),
+    )
+    id = Column(Integer, primary_key=True)
+
+    key_id = Column(Integer, ForeignKey('unique_name.id'))
+    key = relationship("UniqueName", backref=backref('key',
+                                                     order_by=id))
+    index = Column(Text)
+    value = Column(Text)
+
+    event_id = Column(Integer, ForeignKey('event.id'))
+    event = relationship("Event", backref=backref('event',
+                                                  order_by=id))
+
+    def __init__(self, event, key, index, value):
+        self.event = event
+        self.key = key
+        self.index = index
+        self.value = value
+
+
 class Event(Base):
     __tablename__ = 'event'
     __table_args__ = (

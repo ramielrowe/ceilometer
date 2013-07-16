@@ -67,6 +67,22 @@ class Event(Model):
             (self.event_name, self.generated, " ".join(trait_list))
 
 
+class EventBody(Model):
+    """An event body is a simple dictionary representation of an
+    event's entire body.
+    """
+    def __init__(self, event, body):
+        """Create a new event body.
+
+        :param event:   Event for which this Body belongs.
+        :param body:    Dictionary representation of an Event's Body
+        """
+        Model.__init__(self, event=event, body=body)
+
+    def __repr__(self):
+        return "<EventBody: %s>" % self.event
+
+
 class Trait(Model):
     """A Trait is a key/value pair of data on an Event. The value is variant
     record of basic data types (int, date, float, etc).

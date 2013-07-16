@@ -19,8 +19,11 @@
 
 from __future__ import absolute_import
 
+from collections import OrderedDict
+from copy import deepcopy
 import operator
 import os
+import re
 import uuid
 from sqlalchemy import func
 from sqlalchemy import desc
@@ -35,6 +38,7 @@ from ceilometer.storage.sqlalchemy import migration
 from ceilometer.storage.sqlalchemy.models import Alarm
 from ceilometer.storage.sqlalchemy.models import Base
 from ceilometer.storage.sqlalchemy.models import Event
+from ceilometer.storage.sqlalchemy.models import EventBodyEntry
 from ceilometer.storage.sqlalchemy.models import Meter
 from ceilometer.storage.sqlalchemy.models import Project
 from ceilometer.storage.sqlalchemy.models import Resource
@@ -46,6 +50,25 @@ from ceilometer import utils
 
 
 LOG = log.getLogger(__name__)
+
+KEY_SEP = '.'
+LIST_IDENT = '*'
+SPECIAL_KEY_CHARS = [KEY_SEP, LIST_IDENT]
+SPECIAL_RE = {}
+for char in SPECIAL_KEY_CHARS:
+    SPECIAL_RE[char] = re.compile(r'(?<!\\)[%s]' % char)
+
+
+def _escape_specials(s):
+    for c in SPECIAL_KEY_CHARS:
+        s = s.replace(c, '\\%s' % c)
+    return s
+
+
+def _unescape_specials(s):
+    for c in SPECIAL_KEY_CHARS:
+        s = s.replace('\\%s' % c, c)
+    return s
 
 
 class SQLAlchemyStorage(base.StorageEngine):
@@ -559,6 +582,10 @@ class Connection(base.Connection):
     def _get_unique(session, key):
         return session.query(UniqueName).filter(UniqueName.key == key).first()
 
+    @staticmethod
+    def _get_uniques_like(session, key):
+        return session.query(UniqueName).filter(UniqueName.key.like(key)).all()
+
     def _get_or_create_unique_name(self, key, session=None):
         """Find the UniqueName entry for a given key, creating
            one if necessary.
@@ -680,6 +707,7 @@ class Connection(base.Connection):
                 if not event:
                     generated = utils.decimal_to_dt(trait.event.generated)
                     event = api_models.Event(trait.event.unique_name.key,
+                                             trait.event.body,
                                              generated, [])
                     event_models_dict[trait.event_id] = event
                 value = trait.get_value()
@@ -689,3 +717,171 @@ class Connection(base.Connection):
 
         event_models = event_models_dict.values()
         return sorted(event_models, key=operator.attrgetter('generated'))
+
+    def _to_list(self, obj):
+        l = []
+        for i in range(0, len(obj)):
+            l.append(obj[i])
+        return l
+
+    def _convert_lists(self, obj):
+        if isinstance(obj, dict):
+            for key, value in obj.iteritems():
+                obj[key] = self._convert_lists(value)
+            if isinstance(obj, OrderedDict):
+                obj = self._to_list(obj)
+        return obj
+
+    def _create_container(self, key):
+        return OrderedDict() if SPECIAL_RE[LIST_IDENT].match(key) else {}
+
+    def _get_or_create_obj_in_list(self, obj, next_key, index):
+        if index in obj:
+            next_obj = obj[index]
+        else:
+            obj[index] = self._create_container(next_key)
+            next_obj = obj[index]
+        return next_obj
+
+    def _get_or_create_obj_in_dict(self, obj, key, next_key):
+        key = _unescape_specials(key)
+        if key in obj:
+            next_obj = obj[key]
+        else:
+            obj[key] = self._create_container(next_key)
+            next_obj = obj[key]
+        return next_obj
+
+    def _get_or_create_next_obj(self, obj, key, next_key, indexes, index_loc):
+        next_index = index_loc
+        if SPECIAL_RE[LIST_IDENT].match(key):
+            next_index += 1
+            next_obj = self._get_or_create_obj_in_list(obj, next_key,
+                                                       indexes[index_loc])
+        else:
+            next_obj = self._get_or_create_obj_in_dict(obj, key, next_key)
+        return next_obj, next_index
+
+    def _assign_value(self, obj, key, indexes, index_location, value):
+        if SPECIAL_RE[LIST_IDENT].match(key):
+            if index_location == len(indexes)-2:
+                index = indexes[index_location+1]
+                if index == -1:
+                    obj[indexes[index_location]] = []
+                elif index == -2:
+                    obj[indexes[index_location]] = {}
+            else:
+                obj[indexes[index_location]] = value
+        else:
+            key = _unescape_specials(key)
+            if index_location < len(indexes):
+                index = indexes[index_location]
+                if index == -1:
+                    obj[key] = []
+                elif index == -2:
+                    obj[key] = {}
+            else:
+                obj[key] = value
+
+    def _entries_to_dict(self, entries):
+        full_obj = None
+
+        for entry in entries:
+            indexes = [int(x) for x in entry.index.split(',') if x != '']
+            keys = SPECIAL_RE[KEY_SEP].split(entry.key.key)
+            if not full_obj:
+                full_obj = self._create_container(keys[0])
+
+            obj = full_obj
+            index_location = 0
+            next_key_location = 1
+            for key in keys[:-1]:
+                (obj,
+                 index_location) = self._get_or_create_next_obj(obj, key,
+                                                           keys[next_key_location],
+                                                           indexes,
+                                                           index_location)
+                next_key_location += 1
+
+            self._assign_value(obj, keys[-1], indexes, index_location, entry['value'])
+
+        return self._convert_lists(full_obj)
+
+    def _entries_to_event_body(self, entries):
+        return api_models.EventBody(entries[0].event,
+                                    self._entries_to_dict(entries))
+
+    def _list_to_entries(self, event, loc, index, a_list):
+        entries = []
+        cur_index = 0
+
+        if len(a_list) == 0:
+            key = self._get_or_create_unique_name(loc)
+            return [EventBodyEntry(event, key, index+',-1', '')]
+
+        if loc != '':
+            loc += KEY_SEP + LIST_IDENT
+        else:
+            loc = LIST_IDENT
+
+        for obj in a_list:
+            if index != '':
+                my_index = index + ',%s' % cur_index
+            else:
+                my_index = index + '%s' % cur_index
+
+            if isinstance(obj, list):
+                entries.extend(self._list_to_entries(event, loc, my_index,
+                                                     obj))
+            elif isinstance(obj, dict):
+                entries.extend(self._dict_to_entries(event, loc, my_index,
+                                                     obj))
+            else:
+                key = self._get_or_create_unique_name(loc)
+                entries.append(EventBodyEntry(event, key, my_index, obj))
+            cur_index += 1
+        return entries
+
+    def _dict_to_entries(self, event, loc, index, a_dict):
+        entries = []
+
+        if len(a_dict) == 0:
+            key = self._get_or_create_unique_name(loc)
+            return [EventBodyEntry(event, key, index+',-2', '')]
+
+        for key, value in a_dict.iteritems():
+
+            key = _escape_specials(key)
+
+            if loc != '':
+                location = loc + KEY_SEP + key
+            else:
+                location = key
+
+            if isinstance(value, list):
+                entries.extend(self._list_to_entries(event, location, index,
+                                                     value))
+            elif isinstance(value, dict):
+                entries.extend(self._dict_to_entries(event, location, index,
+                                                     value))
+            else:
+                key = self._get_or_create_unique_name(location)
+                entries.append(EventBodyEntry(event, key, index, value))
+        return entries
+
+    def _event_body_to_entries(self, event_body):
+        body = deepcopy(event_body.body)
+        return self._dict_to_entries(event_body.event, '', '', body)
+
+    def record_event_bodies(self, event_bodies):
+        session = sqlalchemy_session.get_session()
+        for event_body in event_bodies:
+            entries = self._event_body_to_entries(event_body)
+            for entry in entries:
+                session.add(entry)
+
+    def get_event_body(self, event_id):
+        session = sqlalchemy_session.get_session()
+        entries = session.query(EventBodyEntry)\
+                         .filter(EventBodyEntry.event_id == event_id).all()
+        return self._entries_to_event_body(entries)

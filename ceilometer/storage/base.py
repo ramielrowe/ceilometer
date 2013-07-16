@@ -174,3 +174,20 @@ class Connection(object):
     def get_events(self, event_filter):
         """Return an iterable of model.Event objects.
         """
+
+    @abc.abstractmethod
+    def record_event_bodies(self, event_bodies):
+        """Write the event body to the backend storage system.
+
+        :param event_bodies: a list of model.EventBody objects.
+        """
+
+    @abc.abstractmethod
+    def get_event_body(self, event_id):
+        """Return the model.EventBody associated with the given event
+        """
+
+    @abc.abstractmethod
+    def filter_event_bodies(self, body_filter):
+        """Return an iterable of model.EventBody objects.
+        """
