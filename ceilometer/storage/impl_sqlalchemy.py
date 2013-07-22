@@ -885,3 +885,6 @@ class Connection(base.Connection):
         entries = session.query(EventBodyEntry)\
                          .filter(EventBodyEntry.event_id == event_id).all()
         return self._entries_to_event_body(entries)
+
+    def filter_event_bodies(self, body_filter):
+        return []
