@@ -114,6 +114,7 @@ class CollectorService(rpc_service.Service):
 
     def __init__(self, host, topic, manager=None):
         super(CollectorService, self).__init__(host, topic, manager)
+        self.storage_conn = storage.get_connection(cfg.CONF)
 
     def start(self):
         super(CollectorService, self).start()
@@ -148,7 +149,8 @@ class CollectorService(rpc_service.Service):
                 namespace=self.DISPATCHER_NAMESPACE,
                 names=cfg.CONF.collector.dispatcher,
                 invoke_on_load=True,
-                invoke_args=[cfg.CONF]):
+                invoke_args=(cfg.CONF, ),
+                invoke_kwds={'storage_conn': self.storage_conn}):
             if dispatcher.obj:
                 self.dispatchers.append(dispatcher.obj)
 

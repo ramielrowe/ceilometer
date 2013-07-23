@@ -54,8 +54,8 @@ class FileDispatcher(dispatcher.Base):
     dispatchers = file
     '''
 
-    def __init__(self, conf):
-        super(FileDispatcher, self).__init__(conf)
+    def __init__(self, conf, **kwargs):
+        super(FileDispatcher, self).__init__(conf, **kwargs)
         self.log = None
 
         # if the directory and path are configured, then log to the file

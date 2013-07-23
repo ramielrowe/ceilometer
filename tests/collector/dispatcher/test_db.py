@@ -17,8 +17,11 @@
 # under the License.
 """Tests for ceilometer/collector/dispatcher/database.py
 """
-from oslo.config import cfg
 from datetime import datetime
+
+import mox
+from mox import ExpectedMethodCallsError
+from oslo.config import cfg
 
 from ceilometer.collector.dispatcher import database
 from ceilometer.publisher import rpc
@@ -30,7 +33,9 @@ class TestDispatcherDB(tests_base.TestCase):
 
     def setUp(self):
         super(TestDispatcherDB, self).setUp()
-        self.dispatcher = database.DatabaseDispatcher(cfg.CONF)
+        conn = self.mox.CreateMock(base.Connection)
+        self.dispatcher = database.DatabaseDispatcher(cfg.CONF,
+                                                      storage_conn=conn)
         self.ctx = None
 
     def test_valid_message(self):
@@ -43,33 +48,26 @@ class TestDispatcherDB(tests_base.TestCase):
             cfg.CONF.publisher_rpc.metering_secret,
         )
 
-        self.dispatcher.storage_conn = self.mox.CreateMock(base.Connection)
         self.dispatcher.storage_conn.record_metering_data(msg)
         self.mox.ReplayAll()
 
         self.dispatcher.record_metering_data(self.ctx, msg)
-        self.mox.VerifyAll()
 
     def test_invalid_message(self):
         msg = {'counter_name': 'test',
                'resource_id': self.id(),
                'counter_volume': 1,
-               }
-        msg['message_signature'] = 'invalid-signature'
+               'message_signature': 'invalid-signature'}
 
-        class ErrorConnection:
+        self.dispatcher.storage_conn\
+                       .record_metering_data(mox.IgnoreArg(),
+                                             mox.IgnoreArg())
 
-            called = False
-
-            def record_metering_data(self, data):
-                self.called = True
-
-        self.dispatcher.storage_conn = ErrorConnection()
-
+        self.mox.ReplayAll()
         self.dispatcher.record_metering_data(self.ctx, msg)
 
-        assert not self.dispatcher.storage_conn.called, \
-            'Should not have called the storage connection'
+        self.assertRaises(ExpectedMethodCallsError, self.mox.VerifyAll)
+        self.mox.ResetAll()
 
     def test_timestamp_conversion(self):
         msg = {'counter_name': 'test',
@@ -86,7 +84,6 @@ class TestDispatcherDB(tests_base.TestCase):
         expected.update(msg)
         expected['timestamp'] = datetime(2012, 7, 2, 13, 53, 40)
 
-        self.dispatcher.storage_conn = self.mox.CreateMock(base.Connection)
         self.dispatcher.storage_conn.record_metering_data(expected)
         self.mox.ReplayAll()
 
@@ -107,7 +104,6 @@ class TestDispatcherDB(tests_base.TestCase):
         expected.update(msg)
         expected['timestamp'] = datetime(2012, 9, 30, 23, 31, 50, 262000)
 
-        self.dispatcher.storage_conn = self.mox.CreateMock(base.Connection)
         self.dispatcher.storage_conn.record_metering_data(expected)
         self.mox.ReplayAll()
 

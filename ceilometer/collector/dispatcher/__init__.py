@@ -23,7 +23,7 @@ class Base(object):
 
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, conf):
+    def __init__(self, conf, **kwargs):
         self.conf = conf
 
     @abc.abstractmethod
