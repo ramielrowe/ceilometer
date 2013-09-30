@@ -35,6 +35,7 @@ import pymongo.errors
 from oslo.config import cfg
 
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -968,6 +969,18 @@ class Connection(base.Connection):
         """
         self.db.alarm_history.insert(alarm_change)
 
+    @staticmethod
+    def _to_datetime(when):
+        return timeutils.normalize_time(timeutils.parse_isotime(when))
+
+    @classmethod
+    def _convert_timestamp(cls, body_dict):
+        timestamp_keys = ['timestamp', '_context_timestamp']
+        for key in timestamp_keys:
+            if key in body_dict and body_dict[key]:
+                body_dict[key] = cls._to_datetime(body_dict[key])
+                break
+
     def record_events(self, events):
         """Write the events.
 
@@ -986,8 +999,26 @@ class Connection(base.Connection):
                 for trait in event.traits:
                     record['traits'][trait.name] = trait.value
 
+            body_dict = None
+            if event.body:
+                body_dict = copy.deepcopy(event.body)
+                body_dict['_id'] = event.message_id
+                self._convert_timestamp(body_dict)
+
             try:
                 self.db.event.insert(record)
+
+                if body_dict:
+                    try:
+                        self.db.event_body.insert(body_dict)
+                    except pymongo.errors.DuplicateKeyError:
+                        problem = (models.Event.DUPLICATE_BODY, event)
+                        problem_events.append(problem)
+                    except Exception as e:
+                        LOG.exception('Failed to record event body: %s', e)
+                        problem = (models.Event.UNKNOWN_BODY_PROBLEM, event)
+                        problem_events.append(problem)
+
             except pymongo.errors.DuplicateKeyError:
                 problem_events.append((models.Event.DUPLICATE, event))
             except Exception as e:

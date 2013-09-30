@@ -49,6 +49,9 @@ OPTS = [
     cfg.BoolOpt('store_events',
                 default=False,
                 help='Save event details'),
+    cfg.BoolOpt('store_event_bodies',
+                default=False,
+                help='Save the raw bodies for events'),
     cfg.MultiStrOpt('dispatcher',
                     default=['database'],
                     help='dispatcher to process metering data'),
@@ -260,7 +263,10 @@ class CollectorService(CollectorBase, rpc_service.Service):
         # Only store non-None value traits ...
         traits = [trait for trait in all_traits if trait.value is not None]
 
-        event = models.Event(message_id, event_name, when, traits)
+        event_body = body if cfg.CONF.collector.store_event_bodies else None
+
+        event = models.Event(message_id, event_name, when, traits,
+                             body=event_body)
 
         problem_events = []
         for dispatcher in self.dispatcher_manager:

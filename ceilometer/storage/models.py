@@ -51,8 +51,10 @@ class Event(Model):
 
     DUPLICATE = 1
     UNKNOWN_PROBLEM = 2
+    DUPLICATE_BODY = 3
+    UNKNOWN_BODY_PROBLEM = 4
 
-    def __init__(self, message_id, event_name, generated, traits):
+    def __init__(self, message_id, event_name, generated, traits, body=None):
         """Create a new event.
 
         :param message_id:  Unique ID for the message this event
@@ -64,7 +66,7 @@ class Event(Model):
         :param traits:      list of Traits on this Event.
         """
         Model.__init__(self, message_id=message_id, event_name=event_name,
-                       generated=generated, traits=traits)
+                       generated=generated, traits=traits, body=body)
 
     def append_trait(self, trait_model):
         self.traits.append(trait_model)
@@ -93,6 +95,19 @@ class Trait(Model):
 
     def __repr__(self):
         return "<Trait: %s %d %s>" % (self.name, self.dtype, self.value)
+
+
+class EventBody(Model):
+    """A dictionary representation of the raw body for a given Event.
+    """
+    DUPLICATE = 1
+    UNKNOWN_PROBLEM = 2
+
+    def __init__(self, message_id, body):
+        Model.__init__(self, message_id=message_id, body=body)
+
+    def __repr__(self):
+        return "<EventBody: %s>" % self.message_id
 
 
 class Resource(Model):
