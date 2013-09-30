@@ -75,3 +75,9 @@ class DatabaseDispatcher(dispatcher.Base):
             events = [events]
 
         return self.storage_conn.record_events(events)
+
+    def record_bodies(self, bodies):
+        if not isinstance(bodies, list):
+            bodies = [bodies]
+
+        return self.storage_conn.record_event_bodies(bodies)

@@ -769,3 +769,19 @@ class Connection(base.Connection):
         :param event_filter: EventFilter instance
         """
         raise NotImplementedError('Events not implemented.')
+
+    @staticmethod
+    def record_event_bodies(bodies):
+        """Write the event bodies to the backend storage system.
+
+        :param bodies: a list of model.EventBody objects.
+        """
+        raise NotImplementedError('EventBody not implemented')
+
+    @staticmethod
+    def get_event_body(message_id):
+        """Return a model.EventBody
+
+        :param message_id: a UUID for a given event
+        """
+        raise NotImplementedError('EventBody not implemented')

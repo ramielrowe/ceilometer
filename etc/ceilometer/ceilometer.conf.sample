@@ -827,6 +827,9 @@
 # Save event details (boolean value)
 #store_events=false
 
+# Save raw event bodies (boolean value)
+#store_event_bodies=false
+
 # dispatcher to process metering data (multi valued)
 #dispatcher=database
 

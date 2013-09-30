@@ -84,3 +84,8 @@ class FileDispatcher(dispatcher.Base):
         if self.log:
             self.log.info(events)
         return []
+
+    def record_bodies(self, bodies):
+        if self.log:
+            self.log.info(bodies)
+        return []

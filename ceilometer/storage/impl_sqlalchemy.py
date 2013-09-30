@@ -893,3 +893,17 @@ class Connection(base.Connection):
 
         event_models = event_models_dict.values()
         return sorted(event_models, key=operator.attrgetter('generated'))
+
+    def record_event_bodies(self, bodies):
+        """Write the event bodies to the backend storage system.
+
+        :param bodies: a list of model.EventBody objects.
+        """
+        raise NotImplementedError('EventBody not implemented.')
+
+    def get_event_body(self, message_id):
+        """Return a model.EventBody
+
+        :param message_id: a UUID for a given event
+        """
+        raise NotImplementedError('EventBody not implemented.')

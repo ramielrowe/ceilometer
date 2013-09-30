@@ -35,6 +35,7 @@ import pymongo.errors
 from oslo.config import cfg
 
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -1044,3 +1045,57 @@ class Connection(base.Connection):
         events = self.db.event.find(q)
         return sorted([Connection._to_event_model(x) for x in events],
                       key=operator.attrgetter('generated'))
+
+    @staticmethod
+    def _to_datetime(when):
+        return timeutils.normalize_time(timeutils.parse_isotime(when))
+
+    @classmethod
+    def _convert_timestamp(cls, body_dict):
+        timestamp_keys = ['timestamp', '_context_timestamp']
+        for key in timestamp_keys:
+            if key in body_dict and body_dict[key]:
+                body_dict[key] = cls._to_datetime(body_dict[key])
+                break
+
+    def record_event_bodies(self, bodies):
+        """Write the event bodies to the backend storage system.
+
+        :param bodies: a list of model.EventBody objects.
+        """
+        problem_bodies = []
+        for body in bodies:
+            # Copy the dictionary because we will be setting '_id' and
+            # converting the timestamp field to a datetime.
+            body_dict = copy.deepcopy(body.body)
+            body_dict['_id'] = body.message_id
+            self._convert_timestamp(body_dict)
+            try:
+                self.db.event_body.insert(body_dict)
+            except pymongo.errors.DuplicateKeyError:
+                problem_bodies.append((models.EventBody.DUPLICATE, body))
+            except Exception as e:
+                LOG.exception('Failed to record event: %s', e)
+                problem_bodies.append((models.EventBody.UNKNOWN_PROBLEM, body))
+        return problem_bodies
+
+    @staticmethod
+    def _to_event_body_model(body):
+        body_dict = copy.deepcopy(body)
+        del body_dict['_id']
+
+        if body_dict['timestamp']:
+            body_dict['timestamp'] = timeutils.strtime(body_dict['timestamp'])
+
+        body_model = models.EventBody(message_id=body['_id'],
+                                      body=body_dict)
+        return body_model
+
+    def get_event_body(self, message_id):
+        """Return a model.EventBody
+
+        :param message_id: a UUID for a given event
+        """
+        body = self.db.event_body.find({'_id': message_id})
+        if body.count() > 0:
+            return self._to_event_body_model(body[0])
