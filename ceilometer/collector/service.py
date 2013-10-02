@@ -49,6 +49,9 @@ OPTS = [
     cfg.BoolOpt('store_events',
                 default=False,
                 help='Save event details'),
+    cfg.BoolOpt('store_event_bodies',
+                default=False,
+                help='Save raw event bodies'),
     cfg.MultiStrOpt('dispatcher',
                     default=['database'],
                     help='dispatcher to process metering data'),
@@ -269,6 +272,18 @@ class CollectorService(CollectorBase, rpc_service.Service):
             # Don't ack the message, raise to requeue it
             # if ack_on_error = False
             raise UnableToSaveEventException()
+
+        if cfg.CONF.collector.store_event_bodies:
+            event_body = models.EventBody(message_id=message_id,
+                                          body=body)
+            problem_bodies = []
+            for dispatcher in self.dispatcher_manager:
+                problem_bodies.extend(
+                    dispatcher.obj.record_event_bodies(event_body))
+
+            if models.EventBody.UNKNOWN_PROBLEM in \
+                    [x[0] for x in problem_bodies]:
+                LOG.error("Couldn't save %s." % event_body)
 
     @staticmethod
     def _record_metering_data_for_ext(ext, context, data):

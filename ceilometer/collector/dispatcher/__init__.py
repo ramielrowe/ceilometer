@@ -33,3 +33,7 @@ class Base(object):
     @abc.abstractmethod
     def record_events(self, events):
         """Recording events interface."""
+
+    @abc.abstractmethod
+    def record_event_bodies(self, bodies):
+        """Recording raw event bodies interface."""

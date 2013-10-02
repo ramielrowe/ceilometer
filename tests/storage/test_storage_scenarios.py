@@ -19,6 +19,7 @@
 """ Base classes for DB backend implemtation test
 """
 
+import copy
 import datetime
 import testscenarios
 
@@ -2163,3 +2164,62 @@ class GetEventTest(EventTestBase):
         self.assertEqual(1, len(events))
         self.assertEqual(events[0].event_name, "Bar")
         self.assertEqual(4, len(events[0].traits))
+
+
+class EventBodyTestBase(tests_db.TestBase,
+                        tests_db.MixinTestsWithBackendScenarios):
+    """Separate test base class because we don't want to
+    inherit all the Meter stuff.
+    """
+
+    def setUp(self):
+        super(EventBodyTestBase, self).setUp()
+        self.prepare_data()
+
+    def prepare_data(self):
+        now = timeutils.utcnow()
+        only_milis = (now.microsecond / 1000) * 1000
+        self.time1 = now.replace(microsecond=only_milis)
+        self.time2 = self.time1 + datetime.timedelta(minutes=1)
+        self.dict1 = {'message_id': '1',
+                      'timestamp': timeutils.strtime(self.time1),
+                      'payload': {
+                          'foo': 'bar'
+                      }}
+        self.dict2 = copy.deepcopy(self.dict1)
+        self.dict2['message_id'] = '2'
+        self.dict2['timestamp'] = timeutils.strtime(self.time2)
+        self.body1 = models.EventBody(message_id=self.dict1['message_id'],
+                                      body=self.dict1)
+        self.body2 = models.EventBody(message_id=self.dict2['message_id'],
+                                      body=self.dict2)
+
+
+class EventBodyTest(EventBodyTestBase):
+    def test_save_event_body(self):
+        m = [self.body1, self.body2]
+        self.conn.record_event_bodies(m)
+        for model in m:
+            self.assertTrue(model is not None)
+        self.assertNotEqual(m[0].id, m[1].id)
+
+    def test_duplicate_message_id(self):
+        m = [self.body1, self.body1]
+        problem_bodies = self.conn.record_event_bodies(m)
+        self.assertEqual(1, len(problem_bodies))
+        bad = problem_bodies[0]
+        self.assertEqual(models.EventBody.DUPLICATE, bad[0])
+
+
+class GetEventBodyTest(EventBodyTestBase):
+    def prepare_data(self):
+        super(GetEventBodyTest, self).prepare_data()
+        self.conn.record_event_bodies([self.body1, self.body2])
+
+    def test_get_by_message_id(self):
+        body1 = self.conn.get_event_body(self.body1.message_id)
+        body2 = self.conn.get_event_body(self.body2.message_id)
+        self.assertEqual(self.body1.message_id, body1.message_id)
+        self.assertEqual(self.dict1['timestamp'], body1.body['timestamp'])
+        self.assertEqual(self.body2.message_id, body2.message_id)
+        self.assertEqual(self.dict2['timestamp'], body2.body['timestamp'])

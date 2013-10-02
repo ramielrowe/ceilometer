@@ -105,6 +105,20 @@ class Trait(Model):
         return "<Trait: %s %d %s>" % (self.name, self.dtype, self.value)
 
 
+class EventBody(Model):
+    """The raw notification that generated an event.
+    """
+
+    DUPLICATE = 1
+    UNKNOWN_PROBLEM = 2
+
+    def __init__(self, message_id, body):
+        Model.__init__(self, message_id=message_id, body=body)
+
+    def __repr__(self):
+        return "<Event: %s" % self.message_id
+
+
 class Resource(Model):
     """Something for which sample data has been collected.
     """

@@ -315,3 +315,31 @@ class TestCollectorService(TestCollector):
         when = service.CollectorService._extract_when({})
         self.assertAlmostEqual(timeutils.delta_seconds(now, when), 0.0,
                                places=5)
+
+    def test_message_to_event_with_event_bodies(self):
+        cfg.CONF.set_override("store_event_bodies", True, group="collector")
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher),
+             ])
+        self.srv._message_to_event(TEST_NOTICE)
+        calls = mock_dispatcher.record_event_bodies.call_args_list
+        self.assertEqual(1, len(calls))
+        args, kwargs = calls[0]
+        self.assertEqual(TEST_NOTICE[u'message_id'], args[0].message_id)
+        self.assertEqual(TEST_NOTICE, args[0].body)
+
+    def test_message_to_event_no_event_bodies(self):
+        cfg.CONF.set_override("store_event_bodies", False, group="collector")
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher),
+             ])
+        self.srv._message_to_event(TEST_NOTICE)
+        self.assertFalse(mock_dispatcher.record_event_bodies.called)

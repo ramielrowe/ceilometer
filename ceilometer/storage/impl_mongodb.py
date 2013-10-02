@@ -34,6 +34,7 @@ import pymongo.errors
 from oslo.config import cfg
 
 from ceilometer.openstack.common import log
+from ceilometer.openstack.common import timeutils
 from ceilometer import storage
 from ceilometer.storage import base
 from ceilometer.storage import models
@@ -309,6 +310,8 @@ class Connection(base.Connection):
 
     SORT_OPERATION_MAPPING = {'desc': (pymongo.DESCENDING, '$lt'),
                               'asc': (pymongo.ASCENDING, '$gt')}
+
+    EVENT_TIMESTAMP_KEYS = ['timestamp', '_context_timestamp']
 
     def __init__(self, conf):
         url = conf.database.connection
@@ -1041,3 +1044,65 @@ class Connection(base.Connection):
         events = self.db.event.find(q)
         return sorted([self._to_event_model(x) for x in events],
                       key=operator.attrgetter('generated'))
+
+    @staticmethod
+    def _to_datetime(when):
+        return timeutils.normalize_time(timeutils.parse_isotime(when))
+
+    @classmethod
+    def _convert_timestamp_to_dt(cls, body_dict):
+        for key in cls.EVENT_TIMESTAMP_KEYS:
+            if key in body_dict and body_dict[key]:
+                body_dict[key] = cls._to_datetime(body_dict[key])
+                break
+
+    @classmethod
+    def _convert_timestamp_to_str(cls, body_dict):
+        for key in cls.EVENT_TIMESTAMP_KEYS:
+            if key in body_dict and body_dict[key]:
+                body_dict[key] = timeutils.strtime(body_dict[key])
+                break
+
+    def record_event_bodies(self, bodies):
+        """Write the event bodies to the backend storage system.
+
+        :param bodies: a list of model.EventBody objects.
+        """
+        problem_bodies = []
+        for body in bodies:
+            # Copy the dictionary because we will be setting '_id' and
+            # converting the timestamp field to a datetime.
+            body_dict = copy.deepcopy(body.body)
+            body_dict['_id'] = body.message_id
+            self._convert_timestamp_to_dt(body_dict)
+            try:
+                self.db.event_body.insert(body_dict)
+
+                # Set id for testing purposes
+                body.id = body.message_id
+            except pymongo.errors.DuplicateKeyError:
+                problem_bodies.append((models.EventBody.DUPLICATE, body))
+            except Exception as e:
+                LOG.exception('Failed to record event: %s', e)
+                problem_bodies.append((models.EventBody.UNKNOWN_PROBLEM, body))
+        return problem_bodies
+
+    @classmethod
+    def _to_event_body_model(cls, body):
+        body_dict = copy.deepcopy(body)
+        del body_dict['_id']
+
+        cls._convert_timestamp_to_str(body_dict)
+
+        body_model = models.EventBody(message_id=body['_id'],
+                                      body=body_dict)
+        return body_model
+
+    def get_event_body(self, message_id):
+        """Return a model.EventBody
+
+        :param message_id: a UUID for a given event
+        """
+        body = self.db.event_body.find({'_id': message_id})
+        if body.count() > 0:
+            return self._to_event_body_model(body[0])
