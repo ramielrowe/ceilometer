@@ -2084,7 +2084,7 @@ class EventTest(EventTestBase):
              models.Event("2", "Zoo", now, [])]
         self.conn.record_events(m)
         for model in m:
-            self.assertTrue(model.id >= 0)
+            self.assertTrue(model.id is not None)
         self.assertNotEqual(m[0].id, m[1].id)
 
     def test_save_events_traits(self):
@@ -2105,7 +2105,7 @@ class EventTest(EventTestBase):
         self.conn.record_events(event_models)
         for model in event_models:
             for trait in model.traits:
-                self.assertTrue(trait.id >= 0)
+                self.assertTrue(trait.id is not None)
 
 
 class GetEventTest(EventTestBase):
