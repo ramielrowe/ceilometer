@@ -357,6 +357,13 @@ class Connection(base.Connection):
         self.db.meter.ensure_index([('timestamp', pymongo.DESCENDING)],
                                    name='timestamp_idx')
 
+        self.db.event.ensure_index([('event_name', pymongo.ASCENDING),
+                                    ('generated', pymongo.DESCENDING)],
+                                   name='event_name_idx')
+
+        self.db.event.ensure_index([('generated', pymongo.DESCENDING)],
+                                   name='generated_idx')
+
         indexes = self.db.meter.index_information()
 
         ttl = cfg.CONF.database.time_to_live
