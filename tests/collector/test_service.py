@@ -260,6 +260,60 @@ class TestCollectorService(TestCollector):
         self.assertEqual(now, event.generated)
         self.assertEqual(1, len(event.traits))
 
+    def test_message_to_event_with_store_notification(self):
+        cfg.CONF.set_override("store_notifications", True, group="collector")
+        now = timeutils.utcnow()
+        timeutils.set_time_override(now)
+        message = {'event_type': "foo",
+                   'message_id': "abc",
+                   'publisher_id': "1"}
+
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher
+                                 ),
+             ])
+
+        with patch('ceilometer.collector.service.LOG') as mylog:
+            self.srv._message_to_event(message)
+            self.assertFalse(mylog.exception.called)
+        events = mock_dispatcher.record_events.call_args[0]
+        self.assertEqual(1, len(events))
+        event = events[0]
+        self.assertEqual("foo", event.event_name)
+        self.assertEqual(now, event.generated)
+        self.assertEqual(message, event.notification)
+
+    def test_message_to_event_without_store_notification(self):
+        cfg.CONF.set_override("store_notifications", False, group="collector")
+        now = timeutils.utcnow()
+        timeutils.set_time_override(now)
+        message = {'event_type': "foo",
+                   'message_id': "abc",
+                   'publisher_id': "1"}
+
+        mock_dispatcher = MagicMock()
+        self.srv.dispatcher_manager = test_manager.TestExtensionManager(
+            [extension.Extension('test',
+                                 None,
+                                 None,
+                                 mock_dispatcher
+                                 ),
+             ])
+
+        with patch('ceilometer.collector.service.LOG') as mylog:
+            self.srv._message_to_event(message)
+            self.assertFalse(mylog.exception.called)
+        events = mock_dispatcher.record_events.call_args[0]
+        self.assertEqual(1, len(events))
+        event = events[0]
+        self.assertEqual("foo", event.event_name)
+        self.assertEqual(now, event.generated)
+        self.assertIsNone(event.notification)
+
     def test_message_to_event_duplicate(self):
         cfg.CONF.set_override("store_events", True, group="collector")
         mock_dispatcher = MagicMock()

@@ -827,6 +827,9 @@
 # Save event details (boolean value)
 #store_events=false
 
+# Save the raw notifications with their event (boolean value)
+#store_notifications=false
+
 # dispatcher to process metering data (multi valued)
 #dispatcher=database
 

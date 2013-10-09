@@ -55,7 +55,8 @@ class Event(Model):
     DUPLICATE = 1
     UNKNOWN_PROBLEM = 2
 
-    def __init__(self, message_id, event_name, generated, traits):
+    def __init__(self, message_id, event_name, generated, traits,
+                 notification=None):
         """Create a new event.
 
         :param message_id:  Unique ID for the message this event
@@ -65,9 +66,20 @@ class Event(Model):
         :param event_name:  Name of the event.
         :param generated:   UTC time for when the event occured.
         :param traits:      list of Traits on this Event.
+        :param notification: Either the notification for this
+                             event, or a callable that when
+                             called, returns the notification
+                             for this event.
         """
         Model.__init__(self, message_id=message_id, event_name=event_name,
                        generated=generated, traits=traits)
+        self._notification = notification
+
+    @property
+    def notification(self):
+        if callable(self._notification):
+            self._notification = self._notification()
+        return self._notification
 
     def append_trait(self, trait_model):
         self.traits.append(trait_model)

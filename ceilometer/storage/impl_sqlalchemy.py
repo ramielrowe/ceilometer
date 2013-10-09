@@ -812,6 +812,8 @@ class Connection(base.Connection):
         events = []
         problem_events = []
         for event_model in event_models:
+            if event_model.notification:
+                raise NotImplementedError()
             event = None
             try:
                 with session.begin():
@@ -835,7 +837,6 @@ class Connection(base.Connection):
             if model.traits and actual_traits:
                 for trait, actual_trait in zip(model.traits, actual_traits):
                     trait.id = actual_trait.id
-
         return problem_events
 
     def get_events(self, event_filter):
@@ -882,9 +883,13 @@ class Connection(base.Connection):
                 event = event_models_dict.get(trait.event_id)
                 if not event:
                     generated = utils.decimal_to_dt(trait.event.generated)
+
+                    def notification():
+                        raise NotImplementedError()
                     event = api_models.Event(trait.event.message_id,
                                              trait.event.unique_name.key,
-                                             generated, [])
+                                             generated, [],
+                                             notification=notification)
                     event_models_dict[trait.event_id] = event
                 value = trait.get_value()
                 trait_model = api_models.Trait(trait.name.key, trait.t_type,

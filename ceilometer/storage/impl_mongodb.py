@@ -974,6 +974,19 @@ class Connection(base.Connection):
         """
         self.db.alarm_history.insert(alarm_change)
 
+    def _save_notification(self, event):
+        # Copy the dict so we can safely set '_id' field
+        notif = copy.copy(event.notification)
+        notif['_id'] = event.message_id
+        try:
+            self.db.notification.insert(notif)
+        except pymongo.errors.DuplicateKeyError:
+            return models.Event.DUPLICATE
+        except Exception as e:
+            LOG.exception('Failed to record notification for event: %s', e)
+            return models.Event.UNKNOWN_PROBLEM
+        return 0
+
     def record_events(self, events):
         """Write the events.
 
@@ -981,6 +994,12 @@ class Connection(base.Connection):
         """
         problem_events = []
         for event in events:
+            if event.notification:
+                status = self._save_notification(event)
+                if status == models.Event.UNKNOWN_PROBLEM:
+                    problem_events.append((status, event))
+                    continue
+
             record = {
                 '_id': event.message_id,
                 'event_name': event.event_name,
@@ -1021,12 +1040,23 @@ class Connection(base.Connection):
                                          dtype=dtype))
         return t_models
 
-    @classmethod
-    def _to_event_model(cls, event):
-        traits = cls._to_trait_models(event['traits'])
-        return models.Event(message_id=event['_id'],
+    def _get_notification(self, message_id):
+        try:
+            return self.db.notification.find({'_id': message_id})[0]
+        except IndexError:
+            return None
+
+    def _to_event_model(self, event):
+        traits = self._to_trait_models(event['traits'])
+        message_id = event['_id']
+
+        def load_notification():
+            return self._get_notification(message_id)
+
+        return models.Event(message_id=message_id,
                             event_name=event['event_name'],
-                            generated=event['generated'], traits=traits)
+                            generated=event['generated'], traits=traits,
+                            notification=load_notification)
 
     def get_events(self, event_filter):
         """Return an iterable of model.Event objects.
