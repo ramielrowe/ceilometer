@@ -48,6 +48,10 @@ STORAGE_OPTS = [
                default=-1,
                help="""number of seconds that samples are kept
 in the database for (<= 0 means forever)"""),
+    cfg.IntOpt('float_precision',
+               default=4,
+               help="""number of decimal places of precision to preserve
+when storing floats"""),
 ]
 
 cfg.CONF.register_opts(STORAGE_OPTS, group='database')
@@ -126,9 +130,13 @@ class EventFilter(object):
                    currently, only one trait dict is supported.
     """
 
-    def __init__(self, start, end, event_name=None, traits={}):
-        self.start = utils.sanitize_timestamp(start)
-        self.end = utils.sanitize_timestamp(end)
+    def __init__(self, start=None, end=None, event_name=None, traits={}):
+        self.start = None
+        if start:
+            self.start = utils.sanitize_timestamp(start)
+        self.end = None
+        if end:
+            self.end = utils.sanitize_timestamp(end)
         self.event_name = event_name
         self.traits = traits
 
